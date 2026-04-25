@@ -9,8 +9,6 @@
 node_modules/
 __pycache__/
 .DS_Store
-*.mp4
-*.mov
 *.zip
 *.tar.gz
 build/
