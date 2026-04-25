@@ -2,7 +2,7 @@
 
 ![MRV](/MRV.jpg)
 
-A spring-loaded monopedal hopping robot stabilised by dual-axis reaction wheels, designed as a proof of concept for low-gravity exploration.
+A spring-loaded monopedal hopping robot stabilised by dual-axis reaction wheels, designed as a proof of concept for low-gravity exploration. Please read Dissertation.pdf for in depth development.
 
 Developed as a BEng Mechanical Engineering thesis at the University of Warwick (ES327), supervised by Dr. Chris Purssell. Inspired by UC Berkeley's [SALTO](https://doi.org/10.1126/scirobotics.aag2048).
 
