@@ -54,7 +54,7 @@ Two orthogonal reaction wheel arms provide pitch and roll correction during flig
 
 ## CAD
 
-Full Fusion 360 project with all components: [Autodesk Fusion link](YOUR_FUSION_LINK_HERE)
+All CAD files are available in the FUSION folder in this repo.
 
 ---
 
