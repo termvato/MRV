@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>MRV — IMU Visualizer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; overflow: hidden; font-family: 'Courier New', monospace; }
+
+    #overlay {
+      position: fixed; top: 16px; left: 16px;
+      color: #eee; font-size: 13px; line-height: 2;
+      text-shadow: 0 1px 4px #000; pointer-events: none;
+    }
+    #status { color: #f39c12; }
+    #rpy    { color: #3498db; }
+    #joints { color: #2ecc71; }
+    #speeds     { color: #e67e22; }
+    #kinematics { color: #9b59b6; font-size: 11px; }
+    #quat       { color: #666; font-size: 11px; }
+    #hint   { color: #444; font-size: 11px; margin-top: 6px; }
+
+    #connect-btn {
+      position: fixed; top: 16px; right: 16px;
+      padding: 8px 18px; background: #3498db; color: #fff;
+      border: none; border-radius: 5px; cursor: pointer;
+      font-family: inherit; font-size: 13px; transition: background 0.2s;
+    }
+    #connect-btn:hover    { background: #2980b9; }
+    #connect-btn:disabled { background: #444; cursor: default; }
+
+    #calibrate-btn {
+      position: fixed; top: 52px; right: 16px;
+      padding: 8px 18px; background: #27ae60; color: #fff;
+      border: none; border-radius: 5px; cursor: pointer;
+      font-family: inherit; font-size: 13px; transition: background 0.2s;
+    }
+    #calibrate-btn:hover    { background: #219a52; }
+    #calibrate-btn:disabled { background: #444; cursor: default; }
+
+    #cycle-btn {
+      position: fixed; top: 88px; right: 16px;
+      padding: 8px 18px; background: #2980b9; color: #fff;
+      border: none; border-radius: 5px; cursor: pointer;
+      font-family: inherit; font-size: 13px; transition: background 0.2s;
+    }
+    #cycle-btn:hover { background: #2471a3; }
+
+    #pivot-z-label {
+      position: fixed; bottom: 20px; left: 20px;
+      color: #555; font-size: 11px;
+    }
+    #pivot-z-slider {
+      position: fixed; bottom: 16px; left: 130px;
+      width: 120px; accent-color: #e67e22;
+    }
+    #pivot-z-value {
+      position: fixed; bottom: 20px; left: 262px;
+      color: #777; font-size: 11px;
+    }
+
+    .graph-canvas {
+      position: fixed; bottom: 0; height: 160px;
+      pointer-events: none;
+    }
+
+    #motor-panel {
+      position: fixed; top: 90px; right: 16px;
+      background: rgba(15, 15, 30, 0.88);
+      border: 1px solid #334; border-radius: 6px;
+      padding: 10px 14px; color: #ccc;
+      font-size: 12px; line-height: 1.9;
+      width: 220px;
+      display: none;
+    }
+    #motor-panel.connected { display: block; }
+    #motor-panel-title { color: #eee; margin-bottom: 4px; font-size: 13px; }
+    #safety-indicator { font-weight: bold; color: #2ecc71; }
+    #safety-indicator.tripped { color: #e74c3c; }
+    .motor-row { display: flex; align-items: center; gap: 6px; }
+    .motor-row label { width: 52px; flex-shrink: 0; }
+    .motor-row input[type=range] { flex: 1; accent-color: #3498db; }
+    .motor-row .val { width: 28px; text-align: right; color: #888; }
+    .motor-btn {
+      width: 100%; margin-top: 4px;
+      padding: 3px 0; background: #253; color: #9e9; border: 1px solid #474;
+      border-radius: 4px; cursor: pointer; font-family: inherit; font-size: 11px;
+    }
+    .motor-btn:hover { background: #364; }
+    #clear-safety-btn {
+      background: #522; color: #e99; border-color: #744;
+    }
+    #clear-safety-btn:hover { background: #633; }
+    #clear-safety-btn:disabled { background: #222; color: #555; border-color: #334; cursor: default; }
+
+    .panel-divider { margin: 7px 0 5px; border-top: 1px solid #334; }
+
+    .ctrl-mode-btn {
+      flex: 1; padding: 3px 0;
+      background: #1c1c30; color: #778; border: 1px solid #334;
+      border-radius: 4px; cursor: pointer;
+      font-family: inherit; font-size: 10px; transition: background 0.15s;
+    }
+    .ctrl-mode-btn:hover  { background: #252540; color: #aab; }
+    .ctrl-mode-btn.active { background: #1e3a5f; color: #5af; border-color: #3a7abf; }
+
+    .dir-row { display: flex; gap: 4px; margin-top: 2px; }
+    .dir-btn {
+      flex: 1; padding: 3px 0;
+      background: #1c2430; color: #88a; border: 1px solid #446;
+      border-radius: 4px; cursor: pointer;
+      font-family: inherit; font-size: 10px; transition: background 0.15s;
+    }
+    .dir-btn:hover  { background: #253040; }
+    .dir-btn.active { background: #1a3040; color: #5ae; border-color: #38a; }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three":          "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+      "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+
+  <!-- Graph canvases — declared before overlay so they sit below in fixed-position stack -->
+  <canvas id="graph-acc"  class="graph-canvas" style="left:0;         width:33.333%;"></canvas>
+  <canvas id="graph-rpy"  class="graph-canvas" style="left:33.333%;   width:33.333%;"></canvas>
+  <canvas id="graph-volt" class="graph-canvas" style="right:0;        width:33.333%;"></canvas>
+
+  <div id="overlay">
+    <div id="status">○ not connected</div>
+    <div id="rpy">Roll —&nbsp;&nbsp;&nbsp; Pitch —&nbsp;&nbsp;&nbsp; Yaw —</div>
+    <div id="joints">ARM0 —°  ARM1 —°  LEG —°</div>
+    <div id="speeds">Spd2 — rpm  Spd3 — rpm</div>
+    <div id="kinematics">ARM(1) vel — °/s  acc — °/s²</div>
+    <div id="voltage" style="color:#f1c40f;font-size:11px;">Voltage —</div>
+    <div id="quat">q = [ —, —, —, — ]</div>
+    <div id="hint">Drag to orbit · Scroll to zoom · Right-drag to pan</div>
+  </div>
+
+  <button id="connect-btn">Connect Serial</button>
+  <button id="calibrate-btn" disabled>Calibrate</button>
+  <button id="cycle-btn">RPY: R/Y/P</button>
+
+  <div id="motor-panel">
+    <div id="motor-panel-title">Motor Control</div>
+    <div id="safety-indicator">● SAFE</div>
+    <button id="clear-safety-btn" class="motor-btn" disabled>Clear Safety</button>
+    <div style="margin-top:6px;color:#777;font-size:11px">Arm Motors (-255 … 255)</div>
+    <div class="motor-row">
+      <label for="arm-a-slider">Motor A</label>
+      <input id="arm-a-slider" type="range" min="-255" max="255" value="0" step="1">
+      <span id="arm-a-val" class="val">0</span>
+    </div>
+    <div class="motor-row">
+      <label for="arm-b-slider">Motor B</label>
+      <input id="arm-b-slider" type="range" min="-255" max="255" value="0" step="1">
+      <span id="arm-b-val" class="val">0</span>
+    </div>
+    <button id="arm-stop-btn" class="motor-btn">Stop Arms</button>
+    <div style="margin-top:6px;color:#777;font-size:11px">Spring Motor (-255 … 255)</div>
+    <div class="motor-row">
+      <label for="spr-slider">Spring</label>
+      <input id="spr-slider" type="range" min="-255" max="255" value="0" step="1">
+      <span id="spr-val" class="val">0</span>
+    </div>
+    <button id="spr-stop-btn" class="motor-btn">Stop Spring</button>
+
+    <!-- ── Control mode ──────────────────────────────────────────────────── -->
+    <div class="panel-divider"></div>
+    <div style="display:flex;gap:4px;">
+      <button id="mode-manual-btn" class="ctrl-mode-btn active">Manual</button>
+      <button id="mode-pid-btn"    class="ctrl-mode-btn">Attitude PID</button>
+    </div>
+
+    <!-- ── PID section (shown in mode 1) ─────────────────────────────────── -->
+    <div id="pid-section" style="display:none;margin-top:5px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+        <label style="color:#778;font-size:10px;width:36px;">Axis</label>
+        <select id="pid-axis-sel" style="flex:1;padding:2px 3px;background:#111128;color:#aaa;border:1px solid #334;border-radius:3px;font-family:inherit;font-size:10px;">
+          <option value="0">Roll</option>
+          <option value="1" selected>Pitch</option>
+          <option value="2">Yaw</option>
+        </select>
+        <label style="color:#778;font-size:10px;width:44px;text-align:right;">Setpoint</label>
+        <input id="pid-setpoint" type="number" value="0" step="0.5" style="width:44px;padding:2px 3px;background:#111128;color:#aaa;border:1px solid #334;border-radius:3px;font-family:inherit;font-size:10px;">
+        <span style="color:#668;font-size:10px;">°</span>
+      </div>
+      <div style="color:#888;font-size:10px;margin:3px 0 2px;">Kp / Ki / Kd</div>
+      <div style="display:grid;grid-template-columns:20px 1fr 20px 1fr 20px 1fr;gap:2px;align-items:center;">
+        <label style="color:#668;font-size:10px;text-align:right;">Kp</label><input id="pid-kp" type="number" value="0" step="0.1" style="width:100%;padding:1px 2px;background:#111128;color:#aaa;border:1px solid #334;border-radius:3px;font-family:inherit;font-size:10px;">
+        <label style="color:#668;font-size:10px;text-align:right;">Ki</label><input id="pid-ki" type="number" value="0" step="0.01" style="width:100%;padding:1px 2px;background:#111128;color:#aaa;border:1px solid #334;border-radius:3px;font-family:inherit;font-size:10px;">
+        <label style="color:#668;font-size:10px;text-align:right;">Kd</label><input id="pid-kd" type="number" value="0" step="0.01" style="width:100%;padding:1px 2px;background:#111128;color:#aaa;border:1px solid #334;border-radius:3px;font-family:inherit;font-size:10px;">
+      </div>
+      <button id="apply-gains-btn" class="motor-btn" style="margin-top:3px;">Apply Gains</button>
+    </div>
+
+    <!-- ── Direction flip ────────────────────────────────────────────────── -->
+    <div class="panel-divider"></div>
+    <div style="color:#777;font-size:11px;margin-bottom:2px;">Direction Flip</div>
+    <div class="dir-row">
+      <button id="flip-a-btn" class="dir-btn">⇄ Motor A</button>
+      <button id="flip-b-btn" class="dir-btn">⇄ Motor B</button>
+    </div>
+
+    <!-- ── Servo ─────────────────────────────────────────────────────────── -->
+    <div class="panel-divider"></div>
+    <button id="tap-btn" class="motor-btn" style="background:#1a2840;color:#7af;border-color:#38a;">Tap Servo</button>
+  </div>
+
+  <label id="pivot-z-label" for="pivot-z-slider">Pivot&nbsp;Z</label>
+  <input id="pivot-z-slider" type="range" min="-10" max="26" step="0.1" value="-8.5">
+  <span id="pivot-z-value">-8.5</span>
+
+  <script type="module">
+    import * as THREE              from 'three';
+    import { OBJLoader }           from 'three/addons/loaders/OBJLoader.js';
+    import { MTLLoader }           from 'three/addons/loaders/MTLLoader.js';
+    import { OrbitControls }       from 'three/addons/controls/OrbitControls.js';
+
+    // ── Renderer ──────────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // ── Scene & camera ────────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1a1a2e);
+    scene.fog = new THREE.Fog(0x1a1a2e, 120, 300);
+
+    const camera = new THREE.PerspectiveCamera(
+      45, window.innerWidth / window.innerHeight, 0.1, 500
+    );
+    camera.position.set(0, 25, 55);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping  = true;
+    controls.dampingFactor  = 0.07;
+    controls.minDistance    = 10;
+    controls.maxDistance    = 200;
+
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.3);
+    key.position.set(30, 50, 30);
+    key.castShadow = true;
+    scene.add(key);
+
+    const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+    fill.position.set(-30, 10, -20);
+    scene.add(fill);
+
+    // ── World grid ────────────────────────────────────────────────────────────
+    scene.add(new THREE.GridHelper(120, 24, 0x333355, 0x252540));
+
+    // ── Pivot (quaternion applied here) ───────────────────────────────────────
+    const pivot = new THREE.Object3D();
+    scene.add(pivot);
+    pivot.add(new THREE.AxesHelper(14));
+
+    // ── Pivot Z control ───────────────────────────────────────────────────────
+    let PIVOT_Z = -8.507;
+    let loadedObj = null;
+
+    let arm0Mesh = null;
+    let arm1Mesh = null;
+    let legMesh  = null;
+
+    const pivotZSlider = document.getElementById('pivot-z-slider');
+    const pivotZValue  = document.getElementById('pivot-z-value');
+
+    pivotZSlider.addEventListener('input', () => {
+      PIVOT_Z = parseFloat(pivotZSlider.value);
+      pivotZValue.textContent = PIVOT_Z.toFixed(1);
+      if (loadedObj) {
+        loadedObj.position.z = -PIVOT_Z;
+      }
+    });
+
+    // ── Load OBJ + MTL ────────────────────────────────────────────────────────
+    const statusEl = document.getElementById('status');
+
+    const FOOT_BOTTOM = new THREE.Vector3(-0.079, 0.048, -8.507);
+
+    new MTLLoader()
+      .setPath('../models/')
+      .load('model.mtl', (materials) => {
+        materials.preload();
+        new OBJLoader()
+          .setMaterials(materials)
+          .setPath('../models/')
+          .load(
+            'model.obj',
+            (obj) => {
+              const box    = new THREE.Box3().setFromObject(obj);
+              const size   = box.getSize(new THREE.Vector3());
+              const maxDim = Math.max(size.x, size.y, size.z);
+              const scale  = 20 / maxDim;
+
+              const wrapper = new THREE.Group();
+
+              obj.position.copy(FOOT_BOTTOM).negate();
+              loadedObj = obj;
+
+              const weight1Meshes = [];
+              const weight0Meshes = [];
+              obj.traverse(child => {
+                if (child.name === 'ARM')                 arm1Mesh = child;
+                if (child.name === 'ARM (1)')             arm0Mesh = child;
+                if (child.name === 'LEG')                 legMesh  = child;
+                if (child.name === 'WEIGHT' || child.name === 'WEIGHT2')         weight1Meshes.push(child);
+                if (child.name === 'WEIGHT (2)' || child.name === 'WEIGHT2 (1)') weight0Meshes.push(child);
+              });
+
+              function buildArmPivot(armMesh, weights) {
+                const box    = new THREE.Box3().setFromObject(armMesh);
+                const center = box.getCenter(new THREE.Vector3());
+                const pivot  = new THREE.Group();
+                pivot.position.copy(center);
+                obj.add(pivot);
+                [armMesh, ...weights].forEach(mesh => {
+                  mesh.position.sub(center);
+                  pivot.add(mesh);
+                });
+                return pivot;
+              }
+
+              if (arm1Mesh) arm1Mesh = buildArmPivot(arm1Mesh, weight1Meshes);
+              if (arm0Mesh) arm0Mesh = buildArmPivot(arm0Mesh, weight0Meshes);
+
+              wrapper.rotation.x = Math.PI;
+              wrapper.rotation.z = Math.PI / 2;
+              wrapper.scale.setScalar(scale);
+
+              wrapper.add(obj);
+              pivot.add(wrapper);
+              statusEl.textContent = '○ model loaded — click Connect Serial';
+            },
+            (xhr) => {
+              if (xhr.total > 0) {
+                const pct = Math.round(xhr.loaded / xhr.total * 100);
+                statusEl.textContent = `Loading model… ${pct}%`;
+              }
+            },
+            (err) => {
+              statusEl.textContent = `Model error: ${err.message}`;
+            }
+          );
+      });
+
+    const calibrateBtn = document.getElementById('calibrate-btn');
+    // 90° roll offset baked into every calibration.
+    const qRoll90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+
+    calibrateBtn.addEventListener('click', () => {
+      rpyCalibOffset = { r: latestRawR, p: latestRawP, y: latestRawY };
+      calibQuat.copy(qFlipZ).multiply(qRoll90).multiply(latestQuat.clone().invert());
+      arm0CalibOffset = ARM0_INIT_DEG - arm0AngleDeg;
+      arm1CalibOffset = ARM1_INIT_DEG - arm1AngleDeg;
+
+      // Set PID setpoint to the current raw firmware value for the active axis.
+      const axisIdx = parseInt(document.getElementById('pid-axis-sel').value);
+      const setp = [latestFwR, latestFwP, latestFwY][axisIdx];
+      document.getElementById('pid-setpoint').value = setp.toFixed(2);
+      sendCmd(`SETP:${setp.toFixed(2)}`);
+
+      calibrateBtn.textContent = '✓ Calibrated';
+      setTimeout(() => { calibrateBtn.textContent = 'Calibrate'; }, 1500);
+    });
+
+    const cycleBtn = document.getElementById('cycle-btn');
+    cycleBtn.addEventListener('click', () => {
+      rpyModeIdx = (rpyModeIdx + 1) % RPY_MODES.length;
+      cycleBtn.textContent = `RPY: ${RPY_MODES[rpyModeIdx].label}`;
+    });
+
+    // ── WebSerial ─────────────────────────────────────────────────────────────
+    const btn          = document.getElementById('connect-btn');
+    const rpyEl        = document.getElementById('rpy');
+    const jointsEl     = document.getElementById('joints');
+    const speedsEl     = document.getElementById('speeds');
+    const kinematicsEl = document.getElementById('kinematics');
+    const voltageEl    = document.getElementById('voltage');
+    const quatEl       = document.getElementById('quat');
+
+    const QPAT   = /Q:([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)/;
+    const RPYPAT = /RPY:([-\d.]+),([-\d.]+),([-\d.]+)/;
+    const JPAT   = /J:([-\d.]+),([-\d.]+),([-\d.]+)/;
+    const SPAT   = /S:([-\d.]+),([-\d.]+)/;
+    const KPAT   = /K:([-\d.]+),([-\d.]+)/;
+    const VPAT   = /V:([\d.]+)/;
+
+    let latestQuat = new THREE.Quaternion();
+    const qFlipZ   = new THREE.Quaternion(0, 0, 1, 0);
+    let calibQuat  = new THREE.Quaternion(0, 0, 1, 0);
+
+    const RPY_MODES = [
+      { label: 'R/P/Y', assign: fw => ({ r: fw.r, p: fw.p, y: fw.y }) },
+      { label: 'R/Y/P', assign: fw => ({ r: fw.r, p: fw.y, y: fw.p }) },
+      { label: 'P/R/Y', assign: fw => ({ r: fw.p, p: fw.r, y: fw.y }) },
+      { label: 'P/Y/R', assign: fw => ({ r: fw.p, p: fw.y, y: fw.r }) },
+      { label: 'Y/R/P', assign: fw => ({ r: fw.y, p: fw.r, y: fw.p }) },
+      { label: 'Y/P/R', assign: fw => ({ r: fw.y, p: fw.p, y: fw.r }) },
+    ];
+    let rpyModeIdx = 0;
+
+    let arm0AngleDeg    = 0;
+    let arm0CalibOffset = 0;
+    let arm1AngleDeg    = 0;
+    let arm1CalibOffset = 0;
+    let legAngleDeg     = 0;
+    let arm1Vel         = 0;
+    let arm1Acc         = 0;
+
+    let rpyCalibOffset = { r: 0, p: 0, y: 0 };
+    let latestRawR = 0, latestRawP = 0, latestRawY = 0;
+    let latestFwR = 0, latestFwP = 0, latestFwY = 0;  // raw firmware roll/pitch/yaw (pre-mode-mapping)
+
+    const ARM0_INIT_DEG = 0;
+    const ARM1_INIT_DEG = 90;
+
+    // ── Graph ring buffers ────────────────────────────────────────────────────
+    const GRAPH_N  = 300;
+    const velBuf   = [];
+    const accBuf   = [];
+    const rollBuf  = [];
+    const pitchBuf = [];
+    const yawBuf   = [];
+    const voltBuf  = [];
+
+    function ringPush(buf, val) {
+      buf.push(val);
+      if (buf.length > GRAPH_N) buf.shift();
+    }
+
+    const gAccCanvas  = document.getElementById('graph-acc');
+    const gRpyCanvas  = document.getElementById('graph-rpy');
+    const gVoltCanvas = document.getElementById('graph-volt');
+    const gAccCtx     = gAccCanvas.getContext('2d');
+    const gRpyCtx     = gRpyCanvas.getContext('2d');
+    const gVoltCtx    = gVoltCanvas.getContext('2d');
+
+    function resizeGraphCanvases() {
+      const w3 = Math.floor(window.innerWidth / 3);
+      gAccCanvas.width  = w3; gAccCanvas.height  = 160;
+      gRpyCanvas.width  = w3; gRpyCanvas.height  = 160;
+      gVoltCanvas.width = w3; gVoltCanvas.height = 160;
+    }
+    resizeGraphCanvases();
+
+    function drawGraph(ctx, datasets, yMin, yMax, title) {
+      const w = ctx.canvas.width, h = ctx.canvas.height;
+      const pT = 22, pB = 4, pL = 6, pR = 36;
+      const gw = w - pL - pR, gh = h - pT - pB;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(8,8,24,0.88)';
+      ctx.fillRect(0, 0, w, h);
+
+      for (let i = 0; i <= 4; i++) {
+        const fy = i / 4;
+        const py = pT + gh * fy;
+        ctx.strokeStyle = '#1a1a3a'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(pL, py); ctx.lineTo(pL + gw, py); ctx.stroke();
+        ctx.fillStyle = '#444'; ctx.font = '9px monospace'; ctx.textAlign = 'right';
+        ctx.fillText((yMax - (yMax - yMin) * fy).toFixed(0), w - 2, py + 3);
+      }
+
+      if (yMin < 0 && yMax > 0) {
+        const zy = pT + gh * (yMax / (yMax - yMin));
+        ctx.strokeStyle = '#2a2a5a'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pL, zy); ctx.lineTo(pL + gw, zy); ctx.stroke();
+      }
+
+      ctx.textAlign = 'left';
+      let legendX = pL + 2;
+      datasets.forEach(({ buf, color, label }) => {
+        if (buf.length > 1) {
+          ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+          ctx.beginPath();
+          buf.forEach((v, i) => {
+            const x = pL + gw * i / (GRAPH_N - 1);
+            const y = pT + gh * Math.max(0, Math.min(1, 1 - (v - yMin) / (yMax - yMin)));
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        }
+        const last = buf.length ? buf[buf.length - 1].toFixed(1) : '—';
+        ctx.fillStyle = color; ctx.font = 'bold 10px monospace';
+        ctx.fillText(`${label}:${last}`, legendX, pT - 7);
+        legendX += ctx.measureText(`${label}:${last}`).width + 10;
+      });
+
+      ctx.fillStyle = '#445'; ctx.font = '10px monospace'; ctx.textAlign = 'right';
+      ctx.fillText(title, w - pR - 2, pT - 7);
+      ctx.textAlign = 'left';
+    }
+
+    function kinematicsAutoscale() {
+      const bufs = [...velBuf, ...accBuf];
+      if (bufs.length === 0) return [-50, 50];
+      let mn = Infinity, mx = -Infinity;
+      for (const v of bufs) { if (v < mn) mn = v; if (v > mx) mx = v; }
+      const pad = Math.max(Math.abs(mx - mn) * 0.12, 5);
+      const step = Math.pow(10, Math.floor(Math.log10(Math.max((mx - mn + 2 * pad) / 4, 1))));
+      return [Math.floor((mn - pad) / step) * step, Math.ceil((mx + pad) / step) * step];
+    }
+
+    // ── Motor panel state ─────────────────────────────────────────────────────
+    let serialWriter = null;
+
+    const motorPanel      = document.getElementById('motor-panel');
+    const safetyEl        = document.getElementById('safety-indicator');
+    const clearSafetyBtn  = document.getElementById('clear-safety-btn');
+    const armASlider      = document.getElementById('arm-a-slider');
+    const armBSlider      = document.getElementById('arm-b-slider');
+    const armAValEl       = document.getElementById('arm-a-val');
+    const armBValEl       = document.getElementById('arm-b-val');
+    const sprSlider       = document.getElementById('spr-slider');
+    const sprValEl        = document.getElementById('spr-val');
+    const flipABtn        = document.getElementById('flip-a-btn');
+    const flipBBtn        = document.getElementById('flip-b-btn');
+
+    let dirFlipA = false;
+    let dirFlipB = false;
+
+    const JS_SAFETY_DEG = 45.0;
+    let   jsSafetyTripped = false;
+
+    async function sendCmd(cmd) {
+      if (!serialWriter) return;
+      try { await serialWriter.write(new TextEncoder().encode(cmd + '\n')); }
+      catch (e) { console.error('Serial write:', e); }
+    }
+
+    function setSafetyTripped(tripped) {
+      if (tripped) {
+        safetyEl.textContent  = '● SAFETY STOP';
+        safetyEl.className    = 'tripped';
+        clearSafetyBtn.disabled = false;
+        armASlider.value = 0; armAValEl.textContent = '0';
+        armBSlider.value = 0; armBValEl.textContent = '0';
+        sprSlider.value  = 0; sprValEl.textContent  = '0';
+      } else {
+        safetyEl.textContent  = '● SAFE';
+        safetyEl.className    = '';
+        clearSafetyBtn.disabled = true;
+      }
+    }
+
+    function sendArmCmd() {
+      sendCmd(`ARM:${armASlider.value},${armBSlider.value}`);
+    }
+
+    armASlider.addEventListener('input', () => { armAValEl.textContent = armASlider.value; sendArmCmd(); });
+    armBSlider.addEventListener('input', () => { armBValEl.textContent = armBSlider.value; sendArmCmd(); });
+    sprSlider.addEventListener('input',  () => { sprValEl.textContent  = sprSlider.value;  sendCmd(`SPR:${sprSlider.value}`); });
+
+    document.getElementById('arm-stop-btn').addEventListener('click', () => {
+      armASlider.value = 0; armAValEl.textContent = '0';
+      armBSlider.value = 0; armBValEl.textContent = '0';
+      sendArmCmd();
+    });
+    document.getElementById('spr-stop-btn').addEventListener('click', () => {
+      sprSlider.value = 0; sprValEl.textContent = '0';
+      sendCmd('SPR:0');
+    });
+    clearSafetyBtn.addEventListener('click', () => {
+      jsSafetyTripped = false;
+      sendCmd('SAFE_CLR');
+      setSafetyTripped(false);
+    });
+
+    // ── Mode buttons ──────────────────────────────────────────────────────────
+    const modeManualBtn = document.getElementById('mode-manual-btn');
+    const modePidBtn    = document.getElementById('mode-pid-btn');
+    const pidSection    = document.getElementById('pid-section');
+
+    function setMode(m) {
+      modeManualBtn.classList.toggle('active', m === 0);
+      modePidBtn.classList.toggle('active',    m === 1);
+      pidSection.style.display = m === 1 ? '' : 'none';
+      armASlider.disabled = m !== 0;
+      armBSlider.disabled = m !== 0;
+      sendCmd(`CTRL:${m}`);
+      if (m === 0) {
+        armASlider.value = 0; armAValEl.textContent = '0';
+        armBSlider.value = 0; armBValEl.textContent = '0';
+      }
+    }
+
+    modeManualBtn.addEventListener('click', () => setMode(0));
+    modePidBtn.addEventListener('click', () => {
+      // Send axis before switching mode so firmware is configured first
+      sendCmd(`AXIS:${document.getElementById('pid-axis-sel').value}`);
+      setMode(1);
+    });
+
+    document.getElementById('pid-axis-sel').addEventListener('change', function () {
+      sendCmd(`AXIS:${this.value}`);
+    });
+    document.getElementById('pid-setpoint').addEventListener('change', function () {
+      sendCmd(`SETP:${parseFloat(this.value).toFixed(2)}`);
+    });
+    document.getElementById('apply-gains-btn').addEventListener('click', () => {
+      const kp = parseFloat(document.getElementById('pid-kp').value);
+      const ki = parseFloat(document.getElementById('pid-ki').value);
+      const kd = parseFloat(document.getElementById('pid-kd').value);
+      sendCmd(`PIDA:${kp},${ki},${kd}`);
+      sendCmd(`PIDB:${kp},${ki},${kd}`);
+    });
+
+    document.getElementById('tap-btn').addEventListener('click', () => {
+      sendCmd('TAP');
+    });
+
+    flipABtn.addEventListener('click', () => {
+      dirFlipA = !dirFlipA;
+      flipABtn.classList.toggle('active', dirFlipA);
+      sendCmd(`DIRA:${dirFlipA ? 1 : 0}`);
+    });
+    flipBBtn.addEventListener('click', () => {
+      dirFlipB = !dirFlipB;
+      flipBBtn.classList.toggle('active', dirFlipB);
+      sendCmd(`DIRB:${dirFlipB ? 1 : 0}`);
+    });
+
+    let serialBuf = '';
+
+    function parseLine(line) {
+      if (line === 'SAFE:1') { setSafetyTripped(true);  return; }
+      if (line === 'SAFE:0') { setSafetyTripped(false); return; }
+      const qm = QPAT.exec(line);
+      const rm = RPYPAT.exec(line);
+      if (!qm || !rm) return;
+
+      latestQuat.set(parseFloat(qm[1]), parseFloat(qm[2]), parseFloat(qm[3]), parseFloat(qm[4]));
+
+      const fw = { r: parseFloat(rm[1]), p: parseFloat(rm[2]), y: parseFloat(rm[3]) };
+      latestFwR = fw.r; latestFwP = fw.p; latestFwY = fw.y;
+      const mapped = RPY_MODES[rpyModeIdx].assign(fw);
+      latestRawR = mapped.r;
+      latestRawP = mapped.p;
+      latestRawY = mapped.y;
+      const dispR = latestRawR - rpyCalibOffset.r;
+      const dispP = latestRawP - rpyCalibOffset.p;
+      const dispY = latestRawY - rpyCalibOffset.y;
+
+      // JS safety: trip if displayed roll or pitch exceeds threshold.
+      if (!jsSafetyTripped &&
+          (Math.abs(dispR) > JS_SAFETY_DEG || Math.abs(dispP) > JS_SAFETY_DEG)) {
+        jsSafetyTripped = true;
+        setSafetyTripped(true);
+        sendCmd('CTRL:0');
+      }
+
+      const r = dispR.toFixed(1).padStart(7);
+      const p = dispP.toFixed(1).padStart(7);
+      const y = dispY.toFixed(1).padStart(7);
+      rpyEl.textContent = `Roll ${r}°  Pitch ${p}°  Yaw ${y}°`;
+
+      quatEl.textContent =
+        `q = [${parseFloat(qm[1]).toFixed(4)}, ${parseFloat(qm[2]).toFixed(4)}, ` +
+        `${parseFloat(qm[3]).toFixed(4)}, ${parseFloat(qm[4]).toFixed(4)}]`;
+
+      const jm = JPAT.exec(line);
+      if (jm) {
+        arm0AngleDeg = parseFloat(jm[1]);
+        arm1AngleDeg = parseFloat(jm[2]);
+        legAngleDeg  = parseFloat(jm[3]);
+        jointsEl.textContent = `ARM0 ${arm0AngleDeg.toFixed(1)}°  ARM1 ${arm1AngleDeg.toFixed(1)}°  LEG ${legAngleDeg.toFixed(1)}°`;
+      }
+
+      const sm = SPAT.exec(line);
+      if (sm) {
+        const rpm0 = parseFloat(sm[1]).toFixed(1).padStart(8);
+        const rpm1 = parseFloat(sm[2]).toFixed(1).padStart(8);
+        speedsEl.textContent = `Spd2 ${rpm0} rpm  Spd3 ${rpm1} rpm`;
+      }
+
+      const km = KPAT.exec(line);
+      if (km) {
+        const vel = parseFloat(km[1]).toFixed(1).padStart(8);
+        const acc = parseFloat(km[2]).toFixed(1).padStart(8);
+        kinematicsEl.textContent = `ARM(1) vel ${vel} °/s  acc ${acc} °/s²`;
+        arm1Vel = parseFloat(km[1]);
+        arm1Acc = parseFloat(km[2]);
+      }
+
+      const vm = VPAT.exec(line);
+      if (vm) {
+        const v = parseFloat(vm[1]);
+        voltageEl.textContent = `Voltage ${v.toFixed(3)} V`;
+        ringPush(voltBuf, v);
+      }
+
+      ringPush(rollBuf,  dispR);
+      ringPush(pitchBuf, dispP);
+      ringPush(yawBuf,   dispY);
+      ringPush(velBuf,   arm1Vel);
+      ringPush(accBuf,   arm1Acc);
+    }
+
+    async function connectSerial() {
+      if (!navigator.serial) {
+        alert('WebSerial not available.\nOpen this page in Chrome or Edge (not Safari).');
+        return;
+      }
+      try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        btn.textContent = '● Connected';
+        btn.disabled    = true;
+        calibrateBtn.disabled = false;
+        statusEl.textContent = '● connected';
+
+        serialWriter = port.writable.getWriter();
+        motorPanel.classList.add('connected');
+
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        const reader = decoder.readable.getReader();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          serialBuf += value;
+          let nl;
+          while ((nl = serialBuf.indexOf('\n')) !== -1) {
+            parseLine(serialBuf.slice(0, nl));
+            serialBuf = serialBuf.slice(nl + 1);
+          }
+        }
+      } catch (e) {
+        statusEl.textContent = `Serial error: ${e.message}`;
+        btn.disabled    = false;
+        btn.textContent = 'Connect Serial';
+        serialWriter = null;
+        motorPanel.classList.remove('connected');
+      }
+    }
+
+    btn.addEventListener('click', connectSerial);
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      pivot.quaternion
+        .copy(calibQuat)
+        .multiply(latestQuat);
+
+      if (arm0Mesh) arm0Mesh.rotation.y = -(arm0AngleDeg + arm0CalibOffset) * Math.PI / 180;
+      if (arm1Mesh) arm1Mesh.rotation.x = -(arm1AngleDeg + arm1CalibOffset) * Math.PI / 180;
+      if (legMesh)  legMesh.position.y   = legAngleDeg * 0.1;
+
+      controls.update();
+      renderer.render(scene, camera);
+
+      const [kMin, kMax] = kinematicsAutoscale();
+      drawGraph(gAccCtx,
+        [
+          { buf: velBuf, color: '#e74c3c', label: 'vel °/s' },
+          { buf: accBuf, color: '#9b59b6', label: 'acc °/s²' }
+        ],
+        kMin, kMax, 'ARM(1) Kinematics');
+
+      drawGraph(gRpyCtx,
+        [
+          { buf: rollBuf,  color: '#e74c3c', label: 'R' },
+          { buf: pitchBuf, color: '#2ecc71', label: 'P' },
+          { buf: yawBuf,   color: '#3498db', label: 'Y' }
+        ],
+        -180, 180, 'IMU Roll/Pitch/Yaw °');
+
+      drawGraph(gVoltCtx,
+        [{ buf: voltBuf, color: '#f1c40f', label: 'V' }],
+        0, 10, 'Battery Voltage (V)');
+    }
+    animate();
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      resizeGraphCanvases();
+    });
+  </script>
+</body>
+</html>
