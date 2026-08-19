@@ -2,7 +2,7 @@
 
 ## What this is
 Teensy 4.0 embedded firmware for a robotic system, plus a browser-based 3D visualiser.
-Build system: PlatformIO. Project root: `/Users/vato/Documents/MRV/MRV_code`.
+Build system: PlatformIO. 
 
 ---
 
