@@ -1,4 +1,4 @@
-# MRV Project — Context for New Chat
+# MRV Project — Context for New AI Chat
 
 ## What this is
 Teensy 4.0 embedded firmware for a robotic system, plus a browser-based 3D visualiser.
