@@ -1,6 +1,6 @@
 # Monopedal Reconnaissance Vehicle (MRV)
 
-![MRV](/MRV.jpg)
+![MRV](MRV.jpg)
 
 
 
@@ -113,8 +113,8 @@ MRV/
 ├── models/
 │   └── model.obj
 ├── PCB/
-│   ├── Schematic/
-│   └── MRV.epro/
+│   ├── Schematic.pdf
+│   └── MRV.epro
 └── docs/
     ├── BOM.csv
     ├── CODEBASE_GUIDE.md
