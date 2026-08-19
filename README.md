@@ -79,7 +79,6 @@ MRV/
 ├── README.md
 ├── LICENSE
 ├── platformio.ini
-├── CODEBASE_GUIDE.md
 ├── src/
 │   ├── main.cpp
 │   ├── config/
@@ -107,6 +106,7 @@ MRV/
 │   └── MRV.epro/
 └── docs/
     ├── BOM.csv
+    ├── CODEBASE_GUIDE.md
     └── photos/
 ```
 
