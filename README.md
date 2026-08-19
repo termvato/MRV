@@ -103,8 +103,8 @@ MRV/
 ├── models/
 │   └── model.obj
 ├── PCB/
-│   ├── schematic/
-│   └── gerber/
+│   ├── Schematic/
+│   └── MRV.epro/
 └── docs/
     ├── BOM.csv
     └── photos/
