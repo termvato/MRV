@@ -1,6 +1,9 @@
 # Monopedal Reconnaissance Vehicle (MRV)
 
 ![MRV](/MRV.jpg)
+![MRV](/MRV_jump_text.mp4)
+![MRV](/MRV_demo.mp4)
+
 
 A spring-loaded monopedal hopping robot stabilised by dual-axis reaction wheels, designed as a proof of concept for low-gravity exploration. Please read Dissertation.pdf for in depth development.
 
