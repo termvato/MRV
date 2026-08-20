@@ -46,8 +46,8 @@ rotates about its ground contact point. A slider controls the Z component live.
 | `Body1:6`            | Body sub-part                                 | (0, −3.56, 14.21)      | 12.59–15.84    |
 | `Body2`              | Main chassis — largest part (15k verts)        | (0, 0, −0.21)          | −8.54–8.11     |
 | `ThinBearing`        | Thin bearing race                             | (−1.19, −1.30, 14.79)  | 14.44–15.14    |
-| `ARM`                | **Left arm** — encoder not yet wired          | (8.49, 0, 17.06)       | 16.31–17.81    |
-| `ARM (1)`            | **Right arm** — active encoder on pins 20/21  | (0, 8.49, 17.06)       | 8.38–25.74     |
+| `ARM`                | **Left arm** — active encoder on pins 14, 15          | (8.49, 0, 17.06)       | 16.31–17.81    |
+| `ARM (1)`            | **Right arm** — active encoder on pins 16, 17  | (0, 8.49, 17.06)       | 8.38–25.74     |
 | `WEIGHT`             | Counterweight on ARM (left)                   | (10.09, −7.95, 17.06)  | 15.63–18.49    |
 | `WEIGHT2`            | Counterweight on ARM (left)                   | (10.09, 7.95, 17.06)   | 15.63–18.49    |
 | `WEIGHT2 (1)`        | Counterweight on ARM (1) (right)              | (0, 10.09, 9.11)       | 8.59–9.64      |
@@ -149,7 +149,7 @@ models/
 ### ARM (1) — right arm, ACTIVE
 
 - Hardware: Pimoroni PIM604 Rotary Encoder Breakout
-- Pins: 20 (A), 21 (B)
+- Pins: 16 (A), 17 (B)
 - Library: paulstoffregen/Encoder (hardware quadrature interrupts on Teensy 4.0)
 - **DO NOT change these without re-tuning:**
   - `ENC_ARM1_COUNTS_PER_REV = 12.0f` — nominal 96 CPR but empirically only 12 effective
@@ -159,10 +159,10 @@ models/
   - Formula: `degrees = count × 359.32 / (ENC_ARM1_COUNTS_PER_REV × ENC_ARM1_GEAR_RATIO)`
 - Initial calibration position: **90°** (`ENC_ARM1_INIT_DEG = 90.0f`)
 
-### ARM — left arm, NOT YET WIRED
+### ARM — left arm, ACTIVE
 
 - Guarded by `// #define USE_ARM0_ENCODER` in config.h (commented out)
-- Pins: `PIN_ENC_ARM0_A/B` — left as `???` in pinout.h, fill in when wired
+- Pins: 14 (A), 15 (B)
 - Placeholder constants (tune empirically when wired):
   - `ENC_ARM0_COUNTS_PER_REV = 12.0f`
   - `ENC_ARM0_GEAR_RATIO = 50.0f`
@@ -171,8 +171,8 @@ models/
 
 ### Speed encoders — shaft RPM only, no position tracking
 
-- `s_spd2`: pins 14 (A) / 15 (B)
-- `s_spd3`: pins 16 (A) / 17 (B)
+- `s_spd2`: pins 20 (A) / 21 (B)
+- `s_spd3`: pins 22 (A) / 23 (B)
 - Both PIM604, `ENC_SPEED_COUNTS_PER_REV = 96.0f`
 - Formula: `RPM = (delta_count / 96) × (60 / dt_seconds)`
 
@@ -239,15 +239,14 @@ Single-file Three.js app, no build step. Open in Chrome or Edge (WebSerial API r
 ## What's confirmed working on hardware
 
 - IMU quaternion → RPY at 120 Hz, displayed correctly in 3D
-- ARM(1) encoder angle (manually tuned 359.32f scalar confirmed correct)
+- ARM encoders angle (manually tuned 359.32f scalar confirmed correct)
 - Arm rotation direction correct in visualiser (encoder direction is negated)
 - Calibrate button resets both IMU zero point and arm visual to 90°
-- Speed encoders reading RPM on pins 14/15 and 16/17
+- Speed encoders reading RPM
+- Landing energy recovery
 
 ## What's not yet wired / implemented
 
-- ARM (left arm) encoder — `USE_ARM0_ENCODER` compile guard exists, pins TBD
-- LEG encoder (joint index 2) — always 0° in firmware
-- `WEIGHT2 (1)` and `WEIGHT (2)` mesh animation — belong to ARM(1), no encoder yet
-- ConRod encoders (indices 3–5) — not in firmware
-- IMU INT1 interrupt (Teensy pin 2) — unused, IMU is polled not interrupt-driven
+- Full self balancing
+- Autonomous jumping and landing sequence
+- Self correction sequence
