@@ -41,7 +41,7 @@ https://github.com/user-attachments/assets/74c44a05-26f5-4240-8d7b-2275602fc39d
 
 ## How It Works
 
-The robot stores elastic potential energy in a compression spring via a rack-and-pinion driven by two geared DC motors. A servo-actuated cam releases the driven gear from the rack, allowing the spring to extend and launch the robot. Sawtooth teeth on the rack enable passive ratcheting on landing, recovering kinetic energy without motor power.
+The robot stores elastic potential energy in a compression spring via a rack-and-pinion driven by two geared DC motors. Asymmetric sawtooth teeth on the rack enables self-tightening meshing by redirecting outward shear inwards. In combination with wedges the robot ratchets passively on landing, recovering landing energy without motor power or fast control loops. A servo-actuated cam releases the driven gear from the rack, allowing the spring to extend and launch the robot. 
 
 Two orthogonal reaction wheel arms provide pitch and roll correction during flight. Each arm carries a 42 g pewter counterweight at 79 mm radius, driven by a 50:1 geared DC motor. A 1 kHz safety ISR disengages the arms if attitude exceeds 45°.
 
